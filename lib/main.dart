@@ -1,34 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:weather_and_air/screens/home.dart';
+import 'package:weather_aqi_app/screens/home.dart';
 
-void main() {
-  runApp(const WeatherAQIApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
+  runApp(const WeatherProApp());
 }
 
-class WeatherAQIApp extends StatelessWidget {
-  const WeatherAQIApp({super.key});
-
+class WeatherProApp extends StatelessWidget {
+  const WeatherProApp({super.key});
   @override
   Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(seedColor: Colors.indigo);
-
+    final cs = ColorScheme.fromSeed(seedColor: Colors.indigo);
     return MaterialApp(
-      title: 'Weather + AQI',
       debugShowCheckedModeBanner: false,
+      title: 'Weather Pro',
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: colorScheme,
+        colorScheme: cs,
         textTheme: GoogleFonts.interTextTheme(),
+        scaffoldBackgroundColor: cs.background,
         appBarTheme: AppBarTheme(
-          backgroundColor: colorScheme.surface,
-          foregroundColor: colorScheme.onSurface,
+          backgroundColor: cs.surface,
+          foregroundColor: cs.onSurface,
           elevation: 0,
           centerTitle: true,
         ),
-        scaffoldBackgroundColor: colorScheme.background,
       ),
-      home: const HomeScreen(),
+      home: const HomeV3(),
     );
   }
 }

@@ -1,78 +1,81 @@
+// lib/services/weather_service_v3.dart
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-class WeatherServiceV2 {
-  // 🔥 Danh sách nhiều API key của bạn:
-  final List<String> apiKeys = [
-    "a144155263631e254fe2385ecc1adef3",
-    "eefdf5b3d05447c909e93054158ee384",
-    "385e945e514f14a92c3b295f37659737",
-    "19a5c9460ae3629880045b378d0ccaaa",
-    "65d96e20400e75bfb96f29b00d5c5d43",
-    "71aa75c6da6e441485a41ff75f9d2423",
-    "4ed815d0c628a3f68e284ffd55f85aa9",
-  ];
+class WeatherServiceV3 {
+  WeatherServiceV3();
 
-  int keyIndex = 0;
+  // Read all environment variables that start with `API_KEY_`, e.g. API_KEY_1
+  List<String> get _keys {
+    final names =
+        dotenv.env.keys.where((k) => k.startsWith('API_KEY_')).toList()..sort();
+    final vals = names
+        .map((n) => dotenv.env[n] ?? '')
+        .where((s) => s.isNotEmpty)
+        .toList();
+    return vals;
+  }
+
+  int _idx = 0;
   final String base = "https://api.openweathermap.org/data/2.5";
 
-  Future<dynamic> _fetch(String url) async {
-    int retryCount = 0;
-
-    while (retryCount < apiKeys.length) {
-      final apiKey = apiKeys[keyIndex];
-      final finalUrl = "$url&appid=$apiKey";
-
-      if (kDebugMode) {
-        print("🔑 Using API Key[$keyIndex]");
-      }
-      final response = await http.get(Uri.parse(finalUrl));
-      final code = response.statusCode;
-
-      if (code == 200) {
-        return jsonDecode(response.body);
-      }
-
-      if (code == 401 || code == 429) {
-        keyIndex = (keyIndex + 1) % apiKeys.length;
-        retryCount++;
-        continue;
-      }
-
-      throw Exception("Lỗi API: $code – ${response.body}");
+  Future<dynamic> _fetchUrl(String url) async {
+    final keys = _keys;
+    if (keys.isEmpty) {
+      throw Exception('No API keys found in .env (API_KEY_1, API_KEY_2, ...).');
     }
 
-    throw Exception("Tất cả API key đều lỗi hoặc hết hạn mức!");
+    int tried = 0;
+    while (tried < keys.length) {
+      final k = keys[_idx];
+      final full = "$url&appid=$k";
+      final r = await http.get(Uri.parse(full));
+      if (r.statusCode == 200) {
+        return jsonDecode(r.body);
+      }
+      if (r.statusCode == 401 || r.statusCode == 429) {
+        // rotate key
+        _idx = (_idx + 1) % keys.length;
+        tried++;
+        continue;
+      }
+      throw Exception("API error ${r.statusCode}: ${r.body}");
+    }
+    throw Exception("All API keys failed or rate-limited.");
   }
 
+  // Current weather by city
   Future<Map<String, dynamic>> getCurrentWeather(String city) async {
     final url = "$base/weather?q=$city&units=metric";
-    return await _fetch(url);
+    return Map<String, dynamic>.from(await _fetchUrl(url));
   }
 
+  // OneCall (hourly/daily) by lat/lon
+  Future<Map<String, dynamic>> getOneCall(double lat, double lon) async {
+    // exclude minutely for smaller payload
+    final url =
+        "$base/onecall?lat=$lat&lon=$lon&units=metric&exclude=minutely&lang=vi";
+    return Map<String, dynamic>.from(await _fetchUrl(url));
+  }
+
+  // Air pollution current
   Future<Map<String, dynamic>> getAQI(double lat, double lon) async {
     final url = "$base/air_pollution?lat=$lat&lon=$lon";
-    return await _fetch(url);
+    return Map<String, dynamic>.from(await _fetchUrl(url));
   }
 
-  Future<List<dynamic>> searchLocation(String query) async {
-    final url = "http://api.openweathermap.org/geo/1.0/direct?q=$query&limit=5";
-    return await _fetch(url);
-  }
-
-  // -------------------------
-  // Lấy lịch sử AQI (last 24 hours)
-  // -------------------------
-  Future<List<Map<String, dynamic>>> getAQIHistory(
-      double lat, double lon) async {
-    final int now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
-    final int start = now - 24 * 3600; // 24h trước
+  // Air pollution history (start/end unix)
+  Future<Map<String, dynamic>> getAQIHistory(
+      double lat, double lon, int start, int end) async {
     final url =
-        "$base/air_pollution/history?lat=$lat&lon=$lon&start=$start&end=$now";
-    final res = await _fetch(url);
-    // res.json trả về {"coord":..., "list":[{dt:..., components:{...}, main:{aqi:...}}, ...]}
-    if (res == null || res["list"] == null) return [];
-    return List<Map<String, dynamic>>.from(res["list"]);
+        "$base/air_pollution/history?lat=$lat&lon=$lon&start=$start&end=$end";
+    return Map<String, dynamic>.from(await _fetchUrl(url));
+  }
+
+  // Geocoding
+  Future<List<dynamic>> searchLocation(String q) async {
+    final url = "http://api.openweathermap.org/geo/1.0/direct?q=$q&limit=6";
+    return await _fetchUrl(url);
   }
 }

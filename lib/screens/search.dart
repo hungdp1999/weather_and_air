@@ -1,50 +1,63 @@
 import 'package:flutter/material.dart';
-import 'package:weather_and_air/services/weather_service.dart';
+import 'package:weather_aqi_app/services/weather_service.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
-
   @override
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
 class _SearchScreenState extends State<SearchScreen> {
-  final api = WeatherServiceV2();
+  final service = WeatherServiceV3();
   List<dynamic> results = [];
+  bool loading = false;
 
-  void search(String text) async {
-    if (text.isEmpty) return;
-    results = await api.searchLocation(text);
-    setState(() {});
+  void onSearch(String q) async {
+    if (q.trim().isEmpty) {
+      setState(() => results = []);
+      return;
+    }
+    setState(() => loading = true);
+    try {
+      final res = await service.searchLocation(q);
+      setState(() => results = res);
+    } catch (e) {
+      debugPrint("Search err $e");
+      setState(() => results = []);
+    } finally {
+      setState(() => loading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Search City")),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
+      appBar: AppBar(title: const Text("Search city")),
+      body: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            TextField(
               decoration: const InputDecoration(hintText: "Enter city name"),
-              onChanged: search,
+              onChanged: onSearch,
             ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: results.length,
-              itemBuilder: (_, i) {
-                final item = results[i];
-                return ListTile(
-                  title: Text(item["name"]),
-                  subtitle: Text("${item["lat"]}, ${item["lon"]}"),
-                  onTap: () => Navigator.pop(context, item["name"]),
-                );
-              },
-            ),
-          )
-        ],
+            const SizedBox(height: 8),
+            if (loading) const LinearProgressIndicator(),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                  itemCount: results.length,
+                  itemBuilder: (_, i) {
+                    final r = results[i];
+                    return ListTile(
+                      title: Text("${r['name']}, ${r['country'] ?? ''}"),
+                      subtitle: Text("lat:${r['lat']}, lon:${r['lon']}"),
+                      onTap: () => Navigator.pop(context, r),
+                    );
+                  }),
+            )
+          ],
+        ),
       ),
     );
   }
